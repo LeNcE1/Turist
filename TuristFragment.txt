@@ -1,0 +1,884 @@
+package com.example.turist;
+
+import android.*;
+import android.Manifest;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Color;
+import android.location.Location;
+import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.SystemClock;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.Chronometer;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.android.gms.appindexing.AppIndex;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.FormBody;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
+public class TuristFragment extends Fragment implements
+        OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener{
+    private GoogleMap mMap;
+    final String TAG = "myLogs";
+    private GoogleApiClient mGoogleApiClient;
+    private LocationRequest mLocationRequest;
+    private Location mLastLocation;
+    public LatLng sek;
+    Button send;
+    Button pause;
+    Button exit;
+    TextView textX;
+    TextView textY;
+    int markers=0;
+
+    private boolean mFirst = true;
+    double gpsmyX;
+    double gpsmymX;
+    int idtreak = 0;
+    int idtreakS;
+    String markerS;
+
+    private double gpspojarX ;
+    double gpsmyY ;
+    double gpsmymY ;
+    private double gpspojarY ;
+    private String datapojar = new String();
+    private GoogleApiClient client;
+    private MarkerOptions mMarkerOptions;
+    private double gpsStartX;
+    private double gpsStartY;
+    private String dataStart = new String();
+    private String dataStart1 = new String();
+    private String dataS = new String();
+    private double gpsFinX;
+    private double gpsFinY;
+    private int keyT;
+    int flag=0;
+    String period;
+
+    private ArrayList<String> geosY = new ArrayList<String>();
+    private ArrayList<String> dates = new ArrayList<String>();
+
+    private JSONObject jsonMain = new JSONObject();
+    private JSONObject jsonMain2 = new JSONObject();
+    JSONObject geoArray;
+    JSONArray Geo;
+
+    private JSONArray arrayHellp = new JSONArray();
+    private JSONArray hellp = new JSONArray();
+    private JSONObject arrayHellpName = new JSONObject();
+
+    SharedPreferences sharedPreferences;
+    String message;
+    Chronometer mChronometer;
+    SQLiteDatabase database;
+
+    DBHellp dbHelper;
+
+    private Timer mTimer;
+    private MyTimerTask mMyTimerTask;
+
+    Boolean GPSconnect(){
+        LocationManager lm = (LocationManager)getContext().getSystemService(Context.LOCATION_SERVICE);
+        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER))
+            return false;
+        else
+            return true;}
+    public static boolean hasConnection(Context context) {
+        ConnectivityManager cm = (ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo wifiInfo = cm.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+
+        if (wifiInfo != null && wifiInfo.isConnected())
+        {
+            return true;
+        }
+        wifiInfo = cm.getNetworkInfo(ConnectivityManager.TYPE_MOBILE);
+        if (wifiInfo != null && wifiInfo.isConnected())
+        {
+            return true;
+        }
+        wifiInfo = cm.getActiveNetworkInfo();
+        if (wifiInfo != null && wifiInfo.isConnected())
+        {
+
+            return true;
+        }
+        return false;
+    }
+
+
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_turist, container, false);
+
+       sharedPreferences = getContext().getSharedPreferences("authorization", Context.MODE_PRIVATE);
+        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
+        SupportMapFragment mapFragment = (SupportMapFragment) getFragmentManager().findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        client = new GoogleApiClient.Builder(getContext()).addApi(AppIndex.API).build();
+
+        textX = (TextView) view.findViewById(R.id.textX);
+        textY = (TextView) view.findViewById(R.id.textY);
+        pause = (Button) view.findViewById(R.id.pause);
+        send = (Button) view.findViewById(R.id.send);
+        exit=(Button)view.findViewById(R.id.exit);
+        dbHelper = new DBHellp(getContext());
+        database = dbHelper.getReadableDatabase();
+
+        Cursor cursor = database.query(dbHelper.TABLE_TREAKS,null,null,null,null,null,null);
+        if (sharedPreferences.getInt("mark",0)!=0) {
+            Log.e(TAG,"Записи есть");
+            pause.setVisibility(View.VISIBLE);
+            send.setText("Завершить прогулку");
+            exit.setVisibility(View.INVISIBLE);
+
+        } else{
+            Log.e(TAG,"Данных нет");
+            pause.setVisibility(View.GONE);
+            exit.setVisibility(View.VISIBLE);
+        }
+        cursor.close();
+
+        idtreak=sharedPreferences.getInt("track_id",0);
+
+        mChronometer = (Chronometer) view.findViewById(R.id.chronometer);
+        mChronometer.setOnChronometerTickListener(new Chronometer.OnChronometerTickListener() {
+            @Override
+            public void onChronometerTick(Chronometer chronometer) {
+                long elapsedMillis = SystemClock.elapsedRealtime()
+                        - mChronometer.getBase();
+            }
+        });
+
+
+        exit.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                sharedPreferences.edit().clear().commit();
+                Intent intent=new Intent(getContext(),MainActivity.class);
+                startActivity(intent);
+            }
+        });
+        pause.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if(GPSconnect()) {
+                    if ((gpsmyX != 0.0) && (gpsmyY != 0.0)) {
+                        mChronometer.setBase(SystemClock.elapsedRealtime());
+
+                        markers = 1;
+                        database = dbHelper.getReadableDatabase();
+                        Cursor cursor = database.query(dbHelper.TABLE_TREAKS,null,null,null,null,null,null);
+                        if (cursor.moveToFirst()) {Log.e(TAG,"input");}
+                        else{Log.e(TAG,"no input");}
+                        mTimer = new Timer();
+                        mMyTimerTask = new MyTimerTask();
+                        Log.e(TAG,"period= " +String.valueOf(sharedPreferences.getInt("period",0)));
+                        mTimer.schedule(mMyTimerTask, 1000, sharedPreferences.getInt("period",5) * 1000);
+                        flag = 1;
+                        mChronometer.start();
+                        pause.setVisibility(view.GONE);
+                    }
+                    else Toast.makeText(getContext(), "Мы не можем вас найти", Toast.LENGTH_LONG).show();
+                }
+                else Toast.makeText(getContext(), "Включите передачу геоданных", Toast.LENGTH_LONG).show();
+            }
+        });
+        send.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if(GPSconnect()) {
+                    if((gpsmyX!=0.0)&&(gpsmyY!=0.0)) {
+                        if(send.getText().equals("Начать прогулку")) {
+                            send.setText("Завершить прогулку");
+                            sharedPreferences.edit().putInt("mark",1).commit();
+                            Log.e(TAG,"начали прогулку id= "+ String.valueOf(sharedPreferences.getInt("track_id",0)));
+                            pause.setVisibility(View.INVISIBLE);
+                            mChronometer.setBase(SystemClock.elapsedRealtime());
+                            mChronometer.start();
+                            mTimer = new Timer();
+                            mMyTimerTask = new MyTimerTask();
+                            Log.e(TAG,"period= " +String.valueOf(sharedPreferences.getInt("period",0)));
+                            mTimer.schedule(mMyTimerTask, 1000, sharedPreferences.getInt("period",5)*1000);
+                            exit.setVisibility(View.INVISIBLE);
+
+                        }
+                        else {
+                            if (hasConnection(getContext())) {
+                                send.setText("Начать прогулку");
+                                Log.e(TAG,"завершили прогулку id= "+ String.valueOf(sharedPreferences.getInt("track_id",0)));
+                                if(sharedPreferences.getInt("track_id",0)==0){
+                                    INSERTtoGps1 in1 = new INSERTtoGps1();
+                                    in1.execute();
+                                }
+
+                                INSERTtoGps2 in2 = new INSERTtoGps2();
+                                in2.execute();
+
+                                INSERTtoGps3 in3 = new INSERTtoGps3();
+                                in3.execute();
+
+
+                                if(flag==1){
+                                    mTimer.cancel();
+                                    flag=0;}
+                                mChronometer.stop();
+                                mChronometer.setBase(SystemClock.elapsedRealtime());
+
+                                pause.setVisibility(View.GONE);
+                                exit.setVisibility(View.VISIBLE);
+//                        database.delete(DBHellp.TABLE_TREAKS, null, null);
+                                String backup=sharedPreferences.getString("id", "");
+                                int backup2=sharedPreferences.getInt("period", 60);
+                                sharedPreferences.edit().clear().commit();
+                                sharedPreferences.edit().putString("id", backup).commit();
+                                sharedPreferences.edit().putInt("period", backup2).commit();
+//                        dbHelper.close();
+                            }
+                            else{Toast.makeText(getContext(), "Подключите интернет что бы завершить маршрут", Toast.LENGTH_LONG).show();}
+                        }
+                    }
+                    else Toast.makeText(getContext(), "Мы не можем вас найти", Toast.LENGTH_LONG).show();
+                }
+                else Toast.makeText(getContext(), "Включите передачу геоданных", Toast.LENGTH_LONG).show();
+
+            }
+
+        });
+
+        return view;
+    }
+    class INSERTtoGps1 extends AsyncTask<Void, Void, Void> {
+
+
+        protected String getStatus(String key, String strJson) {
+            JSONObject dataJsonObj = null;
+            String secondName = "";
+            try {
+                dataJsonObj = new JSONObject(strJson);
+                secondName = dataJsonObj.getString(key);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            return secondName;
+        }
+
+        protected Void doInBackground(Void... params) {
+            try {
+
+
+                Log.e(TAG, "2");
+                OkHttpClient client = new OkHttpClient();
+
+                Log.e(TAG, "3");
+                RequestBody formBody = new FormBody.Builder()
+                        .addEncoded("tourist_id", sharedPreferences.getString("id", ""))
+                        .build();
+                Log.e(TAG, "4");
+
+
+                Request request = new Request.Builder()
+                        .url("http://109.120.189.141:81/web/api/track/new")
+                        .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                        .post(formBody)
+                        .build();
+
+                okhttp3.Call call = client.newCall(request);
+                Response response = call.execute();
+                Callback callback = new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+
+                    }
+                };
+
+                callback.onResponse(call, response);
+                message = response.body().string().trim();
+
+                Log.e(TAG, message);
+
+                Log.e(TAG, "message GPS1 = " + message);
+                Log.e(TAG, "Вот прям точно ушли");
+//                                idreg = getStatus("id",srt);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+//                                if(!message.isEmpty())
+            idtreak = Integer.parseInt(getStatus("track_id", message));
+            period = getStatus("period", message);
+            sharedPreferences.edit().putInt("period", Integer.parseInt(period)).commit();
+            Log.e(TAG, "idtreak = " + String.valueOf(idtreak));
+            sharedPreferences.edit().putInt("track_id",idtreak).commit();
+
+//                                else idtreak=0;
+            if (idtreak != 0) {
+                flag=1;
+            } else
+                Toast.makeText(getContext(), "Ошибка", Toast.LENGTH_LONG).show();
+        }
+    }//начало прогулки
+    class INSERTtoGps2 extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+
+            geoArray = new JSONObject();
+            Geo=new JSONArray();
+//            try {
+//                Log.e(TAG, "idtreak = "+String.valueOf(idtreak));
+//                geoArray.put("track_id",idtreakS);
+//                geoArray.put("x", gpsmymX);
+//                geoArray.put("y", gpsmymY);
+//                geoArray.put("date", dataS);
+//            } catch (JSONException e) {
+//                e.printStackTrace();
+//            }
+//            Geo.put(geoArray);
+//
+//            try {
+//                Log.e(TAG, "idtreakGeo = "+geoArray.get("track_id"));
+//                Log.e(TAG, "JSON = "+geoArray.toString());
+//                Log.e(TAG, "JSONGeo = "+Geo.toString());
+//                Log.e(TAG, "tochka");
+//
+//            } catch (JSONException e) {
+//                e.printStackTrace();
+//            }
+
+
+        }
+
+        protected String getStatus(String key, String strJson) {
+            JSONObject dataJsonObj = null;
+            String secondName = "";
+            try {
+                dataJsonObj = new JSONObject(strJson);
+                secondName = dataJsonObj.getString(key);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            return secondName;
+        }
+
+        protected Void doInBackground(Void... params) {
+            try {
+
+                database = dbHelper.getReadableDatabase();
+                Cursor cursor = database.query(dbHelper.TABLE_TREAKS,null,null,null,null,null,null);
+                if (cursor.moveToFirst()) {
+                    int helpKey1=cursor.getColumnIndex(DBHellp.KEY_X);
+                    int helpKey2=cursor.getColumnIndex(DBHellp.KEY_Y);
+                    int helpKey4=cursor.getColumnIndex(DBHellp. KEY_DATE);
+                    int helpKey5=cursor.getColumnIndex(DBHellp. KEY_MARKER);
+                    Geo=new JSONArray();
+                    do {
+                        gpsmymX = cursor.getDouble(helpKey1);
+                        gpsmymY = cursor.getDouble(helpKey2);
+                        dataS = cursor.getString(helpKey4);
+                        markerS = cursor.getString(helpKey5);
+
+
+                        Log.e(TAG, "X = "+ gpsmymX);
+                        Log.e(TAG, "Y = "+ gpsmymY);
+                        Log.e(TAG, "Data = "+ dataS);
+                        Log.e(TAG, "idtreak = "+ idtreakS);
+                        Log.e(TAG, "markers = "+ markerS);
+
+                        geoArray = new JSONObject();
+
+                        try {
+                            geoArray.put("track_id",sharedPreferences.getInt("track_id",0));
+                            geoArray.put("x", gpsmymX);
+                            geoArray.put("y", gpsmymY);
+                            geoArray.put("date", dataS);
+                            geoArray.put("break",markerS);
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                        Geo.put(geoArray);
+                    }
+                    while (cursor.moveToNext());
+                    Log.e(TAG, String.valueOf(Geo));
+                    OkHttpClient client = new OkHttpClient();
+                    RequestBody formBody = new FormBody.Builder()
+                            .addEncoded("points", Geo.toString())
+                            .build();
+                    Request request = new Request.Builder()
+                            .url("http://109.120.189.141:81/web/api/track/add-point")
+                            .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                            .post(formBody)
+                            .build();
+                    Call call = client.newCall(request);
+                    Response response = call.execute();
+                    Callback callback = new Callback() {
+                        @Override
+                        public void onFailure(Call call, IOException e) {
+
+                        }
+
+                        @Override
+                        public void onResponse(Call call, Response response) throws IOException {
+
+                        }
+                    };
+
+                    callback.onResponse(call, response);
+                    message = response.body().string().trim();
+                    Log.e(TAG, "messageGPS 2(точки есть)= " + message);
+
+                } //else
+                {
+                    geoArray = new JSONObject();
+                    Geo=new JSONArray();
+
+                    Calendar calendar = Calendar.getInstance();
+                    dataStart = calendar.getTime().toString();
+
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                    dataStart = dateFormat.format(new Date());
+
+                    Log.e(TAG, "Данных нет об ID");
+                    try {
+                        geoArray.put("track_id",idtreak);
+                        geoArray.put("x", gpsmyX);
+                        geoArray.put("y", gpsmyY);
+                        geoArray.put("date", dataStart);
+                        geoArray.put("break","0");
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                    Geo.put(geoArray);
+                    Log.e(TAG,"json GPS2 = "+Geo.toString());
+                    OkHttpClient client = new OkHttpClient();
+                    RequestBody formBody = new FormBody.Builder()
+                            .addEncoded("points", Geo.toString())
+                            .build();
+                    Request request = new Request.Builder()
+                            .url("http://109.120.189.141:81/web/api/track/add-point")
+                            .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                            .post(formBody)
+                            .build();
+                    Call call = client.newCall(request);
+                    Response response = call.execute();
+                    Callback callback = new Callback() {
+                        @Override
+                        public void onFailure(Call call, IOException e) {
+
+                        }
+
+                        @Override
+                        public void onResponse(Call call, Response response) throws IOException {
+
+                        }
+                    };
+                    callback.onResponse(call, response);
+                    message = response.body().string().trim();
+                    Log.e(TAG, message);
+                    Log.e(TAG, "messageGPS 2 (точек нет)= " + message);
+                }
+
+//                                idreg = getStatus("id",srt);
+                cursor.close();
+                database.delete(DBHellp.TABLE_TREAKS, null, null);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+
+
+
+        }
+    }//отправка точек
+    class INSERTtoGps3 extends AsyncTask<Void, Void, Void> {
+
+
+        protected String getStatus(String key, String strJson) {
+            JSONObject dataJsonObj = null;
+            String secondName = "";
+            try {
+                dataJsonObj = new JSONObject(strJson);
+                secondName = dataJsonObj.getString(key);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            return secondName;
+        }
+
+        protected Void doInBackground(Void... params) {
+            try {
+
+
+                Log.e(TAG, "2");
+                OkHttpClient client = new OkHttpClient();
+
+                Log.e(TAG, "GPS 3 id = "+String.valueOf(idtreak));
+                RequestBody formBody = new FormBody.Builder()
+                        .addEncoded("track_id", String.valueOf(idtreak))
+                        .build();
+                Log.e(TAG, "4");
+
+
+                Request request = new Request.Builder()
+                        .url("http://109.120.189.141:81/web/api/track/end")
+                        .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                        .post(formBody)
+                        .build();
+
+                okhttp3.Call call = client.newCall(request);
+                Response response = call.execute();
+                Callback callback = new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+
+                    }
+
+                    @Override
+                    public void onResponse(Call call, Response response) throws IOException {
+
+                    }
+                };
+
+                callback.onResponse(call, response);
+                message = response.body().string().trim();
+
+                Log.e(TAG, message);
+
+                Log.e(TAG, "messageGPS 3 = " + message);
+                Log.e(TAG, "Вот прям точно ушли");
+//                                idreg = getStatus("id",srt);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+//
+        }
+    }//завершение прогулки
+
+    class MyTimerTask extends TimerTask {
+        @Override
+        public void run() {
+            Log.e(TAG, "Цикл пошёл1");
+            if (sharedPreferences.getInt("mark", 0) != 0) {
+                mTimer.cancel();
+            } else {
+                Calendar calendar = Calendar.getInstance();
+                dataStart = calendar.getTime().toString();
+
+                SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                dataStart = dateFormat.format(new Date());
+
+
+                JSONArray geoArrayH = new JSONArray();
+                geoArrayH.put(String.valueOf(gpsmyX));
+                geoArrayH.put(String.valueOf(gpsmyY));
+                gpsmymX = gpsmyX;
+                gpsmymY = gpsmyY;
+                dataS = dataStart;
+                idtreakS = idtreak;
+                if (true) {
+                    if (markers == 1) {
+                        database = dbHelper.getWritableDatabase();
+                        ContentValues contentValues = new ContentValues();
+
+                        contentValues.put(DBHellp.KEY_Y, gpsmyY);
+                        contentValues.put(DBHellp.KEY_X, gpsmyX);
+                        contentValues.put(DBHellp.KEY_DATE, dataStart);
+                        contentValues.put(DBHellp.KEY_MARKER, "1");
+                        database.insert(DBHellp.TABLE_TREAKS, null, contentValues);
+                        markers = 0;
+
+                    }
+                    if ((gpsmyX != 0.0) && (gpsmyY != 0.0)) {
+                        if (hasConnection(getContext())) {
+                            Log.e(TAG, "Network true-connect");
+                            Log.e(TAG, gpsmyX + " " + gpsmyY);
+                            Log.e(TAG, String.valueOf(sharedPreferences.getInt("track_id", 0)));
+                            if (sharedPreferences.getInt("track_id", 0) == 0) {
+                                INSERTtoGps1 in1 = new INSERTtoGps1();
+                                in1.execute();
+                                Log.e(TAG, "иду за id");
+                            }
+                            INSERTtoGps2 in2 = new INSERTtoGps2();
+                            in2.execute();
+                            //в отправке отправлять ещё и id, корторый конечно сперва надо получитm ЗАМУТИТЬ ОТПРАВКУ
+                        } else {
+                            Log.e(TAG, "Network falsе-connect");
+
+                            database = dbHelper.getWritableDatabase();
+                            ContentValues contentValues = new ContentValues();
+
+                            contentValues.put(DBHellp.KEY_Y, gpsmyY);
+                            contentValues.put(DBHellp.KEY_X, gpsmyX);
+                            contentValues.put(DBHellp.KEY_DATE, dataStart);
+                            contentValues.put(DBHellp.KEY_MARKER, "0");
+                            database.insert(DBHellp.TABLE_TREAKS, null, contentValues);
+
+                            database = dbHelper.getReadableDatabase();
+                            Cursor cursor = database.query(dbHelper.TABLE_TREAKS, null, null, null, null, null, null);
+                            if (cursor.moveToFirst()) {
+                                Log.e(TAG, "input");
+
+                                int helpKey1 = cursor.getColumnIndex(DBHellp.KEY_X);
+                                int helpKey2 = cursor.getColumnIndex(DBHellp.KEY_Y);
+                                int helpKey4 = cursor.getColumnIndex(DBHellp.KEY_DATE);
+                                int helpKey5 = cursor.getColumnIndex(DBHellp.KEY_MARKER);
+                                Geo = new JSONArray();
+                                do {
+                                    gpsmymX = cursor.getDouble(helpKey1);
+                                    gpsmymY = cursor.getDouble(helpKey2);
+                                    dataS = cursor.getString(helpKey4);
+                                    markerS = cursor.getString(helpKey5);
+
+
+                                    Log.e(TAG, "X = " + gpsmymX);
+                                    Log.e(TAG, "Y = " + gpsmymY);
+                                    Log.e(TAG, "Data = " + dataS);
+                                    Log.e(TAG, "idtreak = " + idtreakS);
+                                    Log.e(TAG, "markers = " + markerS);
+
+                                    geoArray = new JSONObject();
+
+                                    try {
+                                        geoArray.put("track_id", sharedPreferences.getInt("track_id", 0));
+                                        geoArray.put("x", gpsmymX);
+                                        geoArray.put("y", gpsmymY);
+                                        geoArray.put("date", dataS);
+                                        geoArray.put("break", markerS);
+                                    } catch (JSONException e) {
+                                        e.printStackTrace();
+                                    }
+                                    Geo.put(geoArray);
+                                }
+                                while (cursor.moveToNext());
+                                Log.e(TAG, String.valueOf(Geo));
+
+                            } else {
+                                Log.e(TAG, "no input");
+                            }
+
+                        }
+                    } else {
+                        // Toast.makeText(MapsActivity.this, "Мы не можем вас найти", Toast.LENGTH_LONG).show();
+                    }
+                } else {
+                    markers = 1;
+                    // Toast.makeText(MapsActivity.this, "Включите передачу геоданных", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+    }
+
+
+
+    @Override
+    public void onConnected(@Nullable Bundle bundle) {
+        Log.e(TAG, "onConnected");
+
+        startLocationUpdates();
+
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        Log.e(TAG, "onLocationChanged");
+
+
+        mLastLocation = location;
+        Log.e(TAG, mLastLocation.getLatitude() + " " + mLastLocation.getLongitude());
+
+        if (mFirst) {
+            mMap.moveCamera(CameraUpdateFactory.
+                    newLatLngZoom(new LatLng(mLastLocation.getLatitude(), mLastLocation.getLongitude()), 16.0f));
+            mFirst = false;
+        }
+        gpsmyX=mLastLocation.getLatitude();
+        gpsmyY=mLastLocation.getLongitude();
+        textX.setText("Широта: "+gpsmyX);
+        textY.setText("Долгота: "+gpsmyY);
+
+    }
+
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
+        mMap.setBuildingsEnabled(false);
+        if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        if (mGoogleApiClient == null) {
+            Log.e(TAG, "googleapi");
+            createLocationRequest();
+            mGoogleApiClient = new GoogleApiClient.Builder(getActivity())
+                    .addConnectionCallbacks(this)
+                    .addOnConnectionFailedListener(this)
+                    .addApi(LocationServices.API)
+                    .build();
+            mGoogleApiClient.connect();
+        }
+
+        mMap.setMyLocationEnabled(true);
+
+
+        init();
+        Polyline line = mMap.addPolyline(new PolylineOptions()
+                .add(new LatLng(51.8450639, 107.5777746),
+                        new LatLng(51.8350639, 107.5777746),
+                        new LatLng(51.8350639, 107.5677746)
+                )
+                .width(5)
+                .color(Color.RED));
+
+    }
+    private void init() {
+        mMarkerOptions = new MarkerOptions();
+
+        mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+
+            @Override
+
+            public void onMapClick(LatLng latLng) {
+
+
+                Log.e(TAG, "5");
+                Log.d(TAG, "onMapClick: " + latLng.latitude + "," + latLng.longitude);
+                mMap.clear();
+                mMap.addMarker(mMarkerOptions.position(latLng).title("Пожар тут!")).showInfoWindow();
+
+                gpspojarX = latLng.latitude;
+                gpspojarY = latLng.longitude;
+
+            }
+        });
+
+        mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
+
+            @Override
+            public void onMapLongClick(LatLng latLng) {
+                Log.d(TAG, "onMapLongClick: " + latLng.latitude + "," + latLng.longitude);
+            }
+        });
+
+        mMap.setOnCameraChangeListener(new GoogleMap.OnCameraChangeListener() {
+
+            @Override
+            public void onCameraChange(CameraPosition camera) {
+                Log.d(TAG, "onCameraChange: " + camera.target.latitude + "," + camera.target.longitude);
+            }
+        });
+    }
+    private void createLocationRequest() {
+        Log.e(TAG, "createLocationRequest");
+
+        mLocationRequest = new LocationRequest();
+        mLocationRequest.setInterval(10000);
+        setIntervalTime(100);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+    }
+    private void setIntervalTime(int time) {
+        mLocationRequest.setFastestInterval(time);
+    }
+    private void startLocationUpdates() {
+        Log.e(TAG, "startLocationUpdates");
+
+        if (ActivityCompat.checkSelfPermission(getContext(),android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest,this);
+    }
+    private void stopLocationUpdates() {
+        if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
+            //   stopLocationUpdates();
+            mGoogleApiClient.disconnect();
+        }
+    }
+}
